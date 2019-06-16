@@ -12,6 +12,8 @@ import (
 var x, y int
 var mode int
 var deleteCommand bool
+var showNumber bool
+var filename string
 
 const (
 	ModeCommand = iota
@@ -24,7 +26,8 @@ func main() {
 	x = 0
 	y = 0
 	deleteCommand = false
-	filename := os.Args[1]
+	showNumber = true
+	filename = os.Args[1]
 	var err error
 	buffers, err = readFile(filename)
 	if err != nil {
@@ -118,6 +121,12 @@ func readFile(filename string) ([]string, error) {
 
 func handleCommand(ev termbox.Event) {
 	switch string(ev.Ch) {
+	case "w":
+		save(filename)
+	case "0", "^":
+		x = 0
+	case "$":
+		x = len(buffers[y])
 	case "h":
 		left()
 	case "i":
@@ -191,6 +200,9 @@ func draw() {
 	fmt.Print("\r")
 	fmt.Print("\033[;H")
 	for by, buffer := range buffers {
+		if showNumber {
+			fmt.Printf("\033[33m%02d: \033[39m", by)
+		}
 		for bx, b := range buffer {
 			chr := string(b)
 			if x == bx && y == by {
