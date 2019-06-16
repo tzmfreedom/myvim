@@ -1,21 +1,36 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"github.com/k0kubun/pp"
 	"github.com/nsf/termbox-go"
+	"io/ioutil"
+	"os"
+	"strings"
 )
-var timer int
 var x, y int
-var phase int
+var mode int
+var deleteCommand bool
+
+const (
+	ModeCommand = iota
+	ModeEdit
+)
 
 var buffers []string
 
 func main() {
 	x = 0
 	y = 0
-	buffers = []string{""}
-	err := termbox.Init()
+	deleteCommand = false
+	filename := os.Args[1]
+	var err error
+	buffers, err = readFile(filename)
+	if err != nil {
+		panic(err)
+	}
+	err = termbox.Init()
 	if err != nil {
 		panic(err)
 	}
@@ -27,29 +42,19 @@ func main() {
 		case termbox.EventKey:
 			switch ev.Key {
 			case termbox.KeyEsc:
-				return
+				if mode == ModeEdit {
+					mode = ModeCommand
+				}
+			case termbox.KeyCtrlS:
+				save(filename)
 			case termbox.KeyArrowUp:
-				if y > 0 {
-					y--
-					if len(buffers[y]) <= x {
-						x = len(buffers[y])
-					}
-				}
+				up()
 			case termbox.KeyArrowDown:
-				if len(buffers)-1 > y {
-					y++
-					if len(buffers[y]) < x {
-						x = len(buffers[y])
-					}
-				}
+				down()
 			case termbox.KeyArrowLeft:
-				if x > 0 {
-					x--
-				}
+				left()
 			case termbox.KeyArrowRight:
-				if len(buffers[y]) > x {
-					x++
-				}
+				right()
 			case termbox.KeyEnter:
 				buf := buffers[y]
 				first := "" + buf[0:x]
@@ -72,18 +77,116 @@ func main() {
 					x--
 				}
 			default:
-				chr := string(ev.Ch)
-				buf := buffers[y]
-				buffers[y] = buf[0:x] + chr + buf[x:]
-				x++
+				if mode == ModeCommand {
+					if string(ev.Ch) == "w" {
+						save(filename)
+					} else if string(ev.Ch) == "q" {
+						return
+					} else {
+						handleCommand(ev)
+					}
+				} else {
+					chr := string(ev.Ch)
+					buf := buffers[y]
+					buffers[y] = buf[0:x] + chr + buf[x:]
+					x++
+				}
 			}
 		default:
 		}
 	}
 }
 
+func readFile(filename string) ([]string, error) {
+	fp, err := os.Open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer fp.Close()
+
+	scanner := bufio.NewScanner(fp)
+
+	for scanner.Scan() {
+		buffers = append(buffers, scanner.Text())
+	}
+
+	if err = scanner.Err(); err != nil {
+		return nil, err
+	}
+	return buffers, nil
+}
+
+func handleCommand(ev termbox.Event) {
+	switch string(ev.Ch) {
+	case "h":
+		left()
+	case "i":
+		mode = ModeEdit
+	case "j":
+		down()
+	case "k":
+		up()
+	case "l":
+		right()
+	case "d":
+		if deleteCommand {
+			deleteLine()
+		}
+		deleteCommand = !deleteCommand
+	}
+}
+
+func deleteLine() {
+	if len(buffers) == 1 {
+		buffers = []string{""}
+	} else {
+		newBuf := make([]string, y)
+		copy(newBuf, buffers[0:y])
+		buffers = append(newBuf, buffers[y+1:]...)
+		if len(buffers) <= y {
+			y = len(buffers)-1
+		}
+		if len(buffers[y]) < x {
+			x = len(buffers[y])
+		}
+	}
+}
+
+func up() {
+	if y > 0 {
+		y--
+		if len(buffers[y]) <= x {
+			x = len(buffers[y])
+		}
+	}
+}
+
+func down() {
+	if len(buffers)-1 > y {
+		y++
+		if len(buffers[y]) < x {
+			x = len(buffers[y])
+		}
+	}
+}
+
+func left() {
+	if x > 0 {
+		x--
+	}
+}
+
+func right() {
+	if len(buffers[y]) > x {
+		x++
+	}
+}
+
+func save(filename string) {
+	ioutil.WriteFile(filename, []byte(strings.Join(buffers, "\n")), 0644)
+}
+
 func draw() {
-	//debug(buffer)
 	fmt.Print("\033[2J")
 	fmt.Print("\r")
 	fmt.Print("\033[;H")
@@ -91,15 +194,23 @@ func draw() {
 		for bx, b := range buffer {
 			chr := string(b)
 			if x == bx && y == by {
-				fmt.Print("\033[42m" + chr + "\033[49m")
+				drawCursorText(chr)
 			} else {
 				fmt.Print(chr)
 			}
 		}
 		if y == by && len(buffers[y]) == x {
-			fmt.Print("\033[42m \033[49m")
+			drawCursorText(" ")
 		}
 		fmt.Print("\n")
+	}
+}
+
+func drawCursorText(chr string) {
+	if mode == ModeCommand {
+		fmt.Print("\033[43m" + chr + "\033[49m")
+	} else {
+		fmt.Print("\033[42m" + chr + "\033[49m")
 	}
 }
 
