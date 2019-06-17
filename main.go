@@ -10,8 +10,11 @@ import (
 	"strings"
 )
 var x, y int
+var width, height int
 var mode int
 var deleteCommand bool
+var colonCommand bool
+var commandBuffer string
 var showNumber bool
 var filename string
 
@@ -19,6 +22,11 @@ const (
 	ModeCommand = iota
 	ModeEdit
 )
+
+type Command struct {
+	Write bool
+	Quite bool
+}
 
 var buffers []string
 
@@ -28,6 +36,9 @@ func main() {
 	deleteCommand = false
 	showNumber = true
 	filename = os.Args[1]
+	colonCommand = false
+	commandBuffer = ""
+
 	var err error
 	buffers, err = readFile(filename)
 	if err != nil {
@@ -38,6 +49,7 @@ func main() {
 		panic(err)
 	}
 	defer termbox.Close()
+	width, height = termbox.Size()
 
 	for {
 		draw()
@@ -59,16 +71,29 @@ func main() {
 			case termbox.KeyArrowRight:
 				right()
 			case termbox.KeyEnter:
-				buf := buffers[y]
-				first := "" + buf[0:x]
-				second := "" + buf[x:]
-				newBuf := make([]string, y)
-				copy(newBuf, buffers[0:y])
-				last := buffers[y+1:]
-				buffers = append(newBuf, first, second)
-				buffers = append(buffers, last...)
-				x = 0
-				y++
+				if colonCommand {
+					command := parseColonCommand(commandBuffer)
+					if command.Write {
+						save(filename)
+					}
+					if command.Quite {
+						return
+					}
+
+					colonCommand = false
+					commandBuffer = ""
+				} else {
+					buf := buffers[y]
+					first := "" + buf[0:x]
+					second := "" + buf[x:]
+					newBuf := make([]string, y)
+					copy(newBuf, buffers[0:y])
+					last := buffers[y+1:]
+					buffers = append(newBuf, first, second)
+					buffers = append(buffers, last...)
+					x = 0
+					y++
+				}
 			case termbox.KeySpace:
 				buf := buffers[y]
 				buffers[y] = buf[0:x] + " " + buf[x:]
@@ -81,12 +106,17 @@ func main() {
 				}
 			default:
 				if mode == ModeCommand {
-					if string(ev.Ch) == "w" {
-						save(filename)
-					} else if string(ev.Ch) == "q" {
-						return
+					if colonCommand {
+						if string(ev.Ch) != ":" {
+							commandBuffer += string(ev.Ch)
+						}
 					} else {
-						handleCommand(ev)
+						if string(ev.Ch) == ":" {
+							colonCommand = true
+							commandBuffer = ""
+						} else {
+							handleCommand(ev)
+						}
 					}
 				} else {
 					chr := string(ev.Ch)
@@ -191,6 +221,17 @@ func right() {
 	}
 }
 
+func parseColonCommand(buffer string) *Command {
+	command := &Command{}
+	if strings.ContainsRune(buffer, 'w') {
+		command.Write = true
+	}
+	if strings.ContainsRune(buffer, 'q') {
+		command.Quite = true
+	}
+	return command
+}
+
 func save(filename string) {
 	ioutil.WriteFile(filename, []byte(strings.Join(buffers, "\n")), 0644)
 }
@@ -216,6 +257,10 @@ func draw() {
 		}
 		fmt.Print("\n")
 	}
+	if colonCommand {
+		fmt.Printf("\033[%d;1H:%s", height-1, commandBuffer)
+	}
+	fmt.Printf("\033[%d;1H[%d:%d]", height, y+1, x+1)
 }
 
 func drawCursorText(chr string) {
