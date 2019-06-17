@@ -152,7 +152,9 @@ func readFile(filename string) ([]string, error) {
 func handleCommand(ev termbox.Event) {
 	switch string(ev.Ch) {
 	case "w":
-		save(filename)
+		word()
+	case "b":
+		back()
 	case "0", "^":
 		x = 0
 	case "$":
@@ -219,6 +221,34 @@ func right() {
 	if len(buffers[y]) > x {
 		x++
 	}
+}
+
+func word() {
+	for i, b := range buffers[y][x:] {
+		if b == ' ' && x + i < len(buffers[y]) {
+			if buffers[y][x+i+1] != ' ' {
+				x += i + 1
+				return
+			}
+		}
+	}
+	x = len(buffers[y])
+}
+
+func back() {
+	if x == len(buffers[y]) {
+		x--
+		return
+	}
+	for i := 0; i < x; i++ {
+		if buffers[y][x-i] == ' ' {
+			if buffers[y][x-i-1] != ' ' {
+				x -= i + 1
+				return
+			}
+		}
+	}
+	x = 0
 }
 
 func parseColonCommand(buffer string) *Command {
