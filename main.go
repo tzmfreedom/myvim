@@ -99,10 +99,16 @@ func main() {
 				buffers[y] = buf[0:x] + " " + buf[x:]
 				x++
 			case termbox.KeyDelete, termbox.KeyBackspace, termbox.KeyBackspace2:
-				if x > 0 {
-					buf := buffers[y]
-					buffers[y] = buf[0:x-1] + buf[x:]
-					x--
+				if mode == ModeCommand {
+					if len(commandBuffer) > 0 {
+						commandBuffer = commandBuffer[:len(commandBuffer)-1]
+					}
+				} else {
+					if x > 0 {
+						buf := buffers[y]
+						buffers[y] = buf[0:x-1] + buf[x:]
+						x--
+					}
 				}
 			default:
 				if mode == ModeCommand {
@@ -152,7 +158,12 @@ func readFile(filename string) ([]string, error) {
 func handleCommand(ev termbox.Event) {
 	switch string(ev.Ch) {
 	case "w":
-		word()
+		if deleteCommand {
+			deleteWord()
+			deleteCommand = false
+		} else {
+			word()
+		}
 	case "b":
 		back()
 	case "0", "^":
@@ -191,6 +202,19 @@ func deleteLine() {
 			x = len(buffers[y])
 		}
 	}
+}
+
+func deleteWord() {
+	buf := buffers[y]
+	for i, b := range buf[x:] {
+		if b == ' ' && x + i < len(buffers[y]) {
+			if buffers[y][x+i+1] != ' ' {
+				buffers[y] = buf[0:x] + buf[x + i + 1:]
+				return
+			}
+		}
+	}
+	buffers[y] = buf[0:x]
 }
 
 func up() {
