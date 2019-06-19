@@ -17,6 +17,7 @@ var colonCommand bool
 var commandBuffer string
 var showNumber bool
 var filename string
+var frameY int
 
 const (
 	ModeCommand = iota
@@ -33,6 +34,7 @@ var buffers []string
 func main() {
 	x = 0
 	y = 0
+	frameY = 0
 	deleteCommand = false
 	showNumber = true
 	filename = os.Args[1]
@@ -83,7 +85,7 @@ func main() {
 					colonCommand = false
 					commandBuffer = ""
 				} else {
-					buf := buffers[y]
+					buf := buffers[frameY+y]
 					first := "" + buf[0:x]
 					second := "" + buf[x:]
 					newBuf := make([]string, y)
@@ -92,11 +94,15 @@ func main() {
 					buffers = append(newBuf, first, second)
 					buffers = append(buffers, last...)
 					x = 0
-					y++
+					if y == height - 1 {
+						frameY++
+					} else {
+						y++
+					}
 				}
 			case termbox.KeySpace:
-				buf := buffers[y]
-				buffers[y] = buf[0:x] + " " + buf[x:]
+				buf := buffers[frameY+y]
+				buffers[frameY+y] = buf[0:x] + " " + buf[x:]
 				x++
 			case termbox.KeyDelete, termbox.KeyBackspace, termbox.KeyBackspace2:
 				if mode == ModeCommand {
@@ -105,8 +111,8 @@ func main() {
 					}
 				} else {
 					if x > 0 {
-						buf := buffers[y]
-						buffers[y] = buf[0:x-1] + buf[x:]
+						buf := buffers[frameY+y]
+						buffers[frameY+y] = buf[0:x-1] + buf[x:]
 						x--
 					}
 				}
@@ -126,8 +132,8 @@ func main() {
 					}
 				} else {
 					chr := string(ev.Ch)
-					buf := buffers[y]
-					buffers[y] = buf[0:x] + chr + buf[x:]
+					buf := buffers[frameY+y]
+					buffers[frameY+y] = buf[0:x] + chr + buf[x:]
 					x++
 				}
 			}
@@ -169,7 +175,7 @@ func handleCommand(ev termbox.Event) {
 	case "0", "^":
 		x = 0
 	case "$":
-		x = len(buffers[y])
+		x = len(buffers[frameY+y])
 	case "h":
 		left()
 	case "i":
@@ -198,39 +204,47 @@ func deleteLine() {
 		if len(buffers) <= y {
 			y = len(buffers)-1
 		}
-		if len(buffers[y]) < x {
-			x = len(buffers[y])
+		if len(buffers[frameY+y]) < x {
+			x = len(buffers[frameY+y])
 		}
 	}
 }
 
 func deleteWord() {
-	buf := buffers[y]
+	buf := buffers[frameY+y]
 	for i, b := range buf[x:] {
-		if b == ' ' && x + i < len(buffers[y]) {
-			if buffers[y][x+i+1] != ' ' {
-				buffers[y] = buf[0:x] + buf[x + i + 1:]
+		if b == ' ' && x + i < len(buffers[frameY+y]) {
+			if buffers[frameY+y][x+i+1] != ' ' {
+				buffers[frameY+y] = buf[0:x] + buf[x + i + 1:]
 				return
 			}
 		}
 	}
-	buffers[y] = buf[0:x]
+	buffers[frameY+y] = buf[0:x]
 }
 
 func up() {
+	if y + frameY == len(buffers) - height + 1 && frameY > 0 {
+		frameY--
+		return
+	}
 	if y > 0 {
 		y--
-		if len(buffers[y]) <= x {
-			x = len(buffers[y])
+		if len(buffers[frameY+y]) <= x {
+			x = len(buffers[frameY+y])
 		}
 	}
 }
 
 func down() {
-	if len(buffers)-1 > y {
+	if y == height - 2 {
+		if y + frameY < len(buffers)-1 {
+			frameY++
+		}
+	} else if len(buffers)-1 > frameY + y {
 		y++
-		if len(buffers[y]) < x {
-			x = len(buffers[y])
+		if len(buffers[frameY+y]) < x {
+			x = len(buffers[frameY+y])
 		}
 	}
 }
@@ -242,31 +256,34 @@ func left() {
 }
 
 func right() {
-	if len(buffers[y]) > x {
+	if len(buffers[frameY+y]) > x {
 		x++
 	}
 }
 
 func word() {
-	for i, b := range buffers[y][x:] {
-		if b == ' ' && x + i < len(buffers[y]) {
-			if buffers[y][x+i+1] != ' ' {
+	for i, b := range buffers[frameY+y][x:] {
+		if b == ' ' && x + i < len(buffers[frameY+y]) {
+			if buffers[frameY+y][x+i+1] != ' ' {
 				x += i + 1
 				return
 			}
 		}
 	}
-	x = len(buffers[y])
+	x = len(buffers[frameY+y])
 }
 
 func back() {
-	if x == len(buffers[y]) {
+	if x == 0 {
+		return
+	}
+	if x == len(buffers[frameY+y]) {
 		x--
 		return
 	}
 	for i := 0; i < x; i++ {
-		if buffers[y][x-i] == ' ' {
-			if buffers[y][x-i-1] != ' ' {
+		if buffers[frameY+y][x-i] == ' ' {
+			if buffers[frameY+y][x-i-1] != ' ' {
 				x -= i + 1
 				return
 			}
@@ -294,9 +311,15 @@ func draw() {
 	fmt.Print("\033[2J")
 	fmt.Print("\r")
 	fmt.Print("\033[;H")
-	for by, buffer := range buffers {
+	var frameBuffers []string
+	if frameY+height < len(buffers) {
+		frameBuffers = buffers[frameY:frameY+height]
+	} else {
+		frameBuffers = buffers[frameY:]
+	}
+	for by, buffer := range frameBuffers {
 		if showNumber {
-			fmt.Printf("\033[33m%02d: \033[39m", by)
+			fmt.Printf("\033[33m%02d: \033[39m", by+frameY)
 		}
 		for bx, b := range buffer {
 			chr := string(b)
@@ -306,7 +329,7 @@ func draw() {
 				fmt.Print(chr)
 			}
 		}
-		if y == by && len(buffers[y]) == x {
+		if y == by && len(buffers[frameY+y]) == x {
 			drawCursorText(" ")
 		}
 		fmt.Print("\n")
@@ -315,6 +338,7 @@ func draw() {
 		fmt.Printf("\033[%d;1H:%s", height-1, commandBuffer)
 	}
 	fmt.Printf("\033[%d;1H[%d:%d]", height, y+1, x+1)
+	fmt.Printf("[%d:%d:%d:%d]", len(buffers), height, y, frameY)
 }
 
 func drawCursorText(chr string) {
