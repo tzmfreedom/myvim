@@ -110,11 +110,7 @@ func main() {
 						commandBuffer = commandBuffer[:len(commandBuffer)-1]
 					}
 				} else {
-					if x > 0 {
-						buf := buffers[frameY+y]
-						buffers[frameY+y] = buf[0:x-1] + buf[x:]
-						x--
-					}
+					deleteChar()
 				}
 			default:
 				if mode == ModeCommand {
@@ -181,6 +177,9 @@ func handleCommand(ev termbox.Event) {
 		x = len(buffers[frameY+y])
 	case "h":
 		left()
+	case "a":
+		right()
+		mode = ModeEdit
 	case "i":
 		mode = ModeEdit
 	case "j":
@@ -189,11 +188,22 @@ func handleCommand(ev termbox.Event) {
 		up()
 	case "l":
 		right()
+	case "x":
+		right()
+		deleteChar()
 	case "d":
 		if deleteCommand {
 			deleteLine()
 		}
 		deleteCommand = !deleteCommand
+	}
+}
+
+func deleteChar() {
+	if x > 0 {
+		buf := buffers[frameY+y]
+		buffers[frameY+y] = buf[0:x-1] + buf[x:]
+		x--
 	}
 }
 
