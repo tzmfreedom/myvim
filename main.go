@@ -145,6 +145,9 @@ func main() {
 func readFile(filename string) ([]string, error) {
 	fp, err := os.Open(filename)
 	if err != nil {
+		if _, ok := err.(*os.PathError); ok {
+			return []string{""}, nil
+		}
 		return nil, err
 	}
 	defer fp.Close()
